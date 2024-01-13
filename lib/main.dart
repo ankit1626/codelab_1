@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(MyApp());
@@ -8,44 +11,16 @@ void main() {
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => MyAppState(),
-      child: MaterialApp(
-        title: 'Namer App',
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.yellow),
-        ),
-        home: MyHomePage(),
+    return MaterialApp(
+      title: 'Namer App',
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.yellow),
       ),
+      home: MyHomePage(),
     );
-  }
-}
-
-class MyAppState extends ChangeNotifier {
-  var current = WordPair.random();
-  var favorites = <WordPair>[];
-
-  void getNext() {
-    current = WordPair.random();
-    notifyListeners();
-  }
-
-  void toggleFavorite() {
-    if (favorites.contains(current)) {
-      favorites.remove(current);
-    } else {
-      favorites.add(current);
-    }
-    notifyListeners();
-  }
-
-  void removeFavorite(value) {
-    favorites.removeAt(value);
-    notifyListeners();
   }
 }
 
@@ -56,6 +31,25 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   var selectedIndex = 0;
+  void loadselectedIndex() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      selectedIndex = prefs.getInt('selectedIndex') ?? 0;
+    });
+  }
+
+  void setselectedIndex() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('selectedIndex', selectedIndex);
+  }
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    loadselectedIndex();
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget page;
@@ -91,6 +85,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   setState(() {
                     selectedIndex = value;
                   });
+                  setselectedIndex();
                 },
               ),
             ),
@@ -107,31 +102,70 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-class GeneratorPage extends StatelessWidget {
+class GeneratorPage extends StatefulWidget {
+  @override
+  State<GeneratorPage> createState() => _GeneratorPageState();
+}
+
+class _GeneratorPageState extends State<GeneratorPage> {
+  var current = WordPair.random();
+  static var favorites = [];
+  void loadfavorites() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      var favorite = prefs.getString('favorites') ?? [].toString();
+      favorites = jsonDecode(favorite);
+    });
+  }
+
+  void setfavorites() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('favorites', jsonEncode(favorites));
+  }
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    loadfavorites();
+  }
+
+  void getNext() {
+    current = WordPair.random();
+    setState(() {});
+  }
+
+  void toggleFavorite() {
+    if (favorites.contains(current.asString)) {
+      favorites.remove(current.asString);
+      setfavorites();
+    } else {
+      favorites.add(current.asString);
+      setfavorites();
+    }
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>();
-    var pair = appState.current;
-
     IconData icon;
-    if (appState.favorites.contains(pair)) {
+    if (favorites.contains(current.asString)) {
       icon = Icons.favorite;
     } else {
       icon = Icons.favorite_border;
     }
-
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          BigCard(pair: pair),
+          BigCard(pair: current),
           SizedBox(height: 10),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               ElevatedButton.icon(
                 onPressed: () {
-                  appState.toggleFavorite();
+                  toggleFavorite();
                 },
                 icon: Icon(icon),
                 label: Text('Like'),
@@ -139,7 +173,7 @@ class GeneratorPage extends StatelessWidget {
               SizedBox(width: 10),
               ElevatedButton(
                 onPressed: () {
-                  appState.getNext();
+                  getNext();
                 },
                 child: Text('Next'),
               ),
@@ -175,37 +209,60 @@ class BigCard extends StatelessWidget {
   }
 }
 
-class FavoritesPage extends StatelessWidget {
+class FavoritesPage extends StatefulWidget {
   const FavoritesPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    var appState = context.watch<MyAppState>();
-    var fav = appState.favorites;
+  State<FavoritesPage> createState() => _FavoritesPageState();
+}
 
+class _FavoritesPageState extends State<FavoritesPage> {
+  var fav = _GeneratorPageState.favorites;
+
+  void loadfavorites() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    setState(() {
+      var favorite = prefs.getString('favorites') ?? [].toString();
+      fav = jsonDecode(favorite);
+    });
+  }
+
+  void setfavorites() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        'favorites', jsonEncode(_GeneratorPageState.favorites));
+  }
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    loadfavorites();
+  }
+
+  void removeFavorite(value) {
+    _GeneratorPageState.favorites.removeAt(value);
+    fav.removeAt(value);
+    setfavorites();
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return ListView.builder(
         itemCount: fav.length,
         itemBuilder: (context, index) {
-          return Card(
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            elevation: 2.0,
-            margin: EdgeInsets.all(10.0),
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  Text(fav[index].asString),
-                  IconButton(
-                      onPressed: () {
-                        // print(fav[index].asString);
-                        appState.removeFavorite(index);
-                      },
-                      icon: const Icon(
-                        Icons.delete,
-                        color: Colors.red,
-                      )),
-                ],
+          return GestureDetector(
+            onLongPressEnd: (details) {
+              removeFavorite(index);
+            },
+            child: Card(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              elevation: 2.0,
+              margin: EdgeInsets.all(10.0),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Text(fav[index]),
               ),
             ),
           );
